@@ -1,93 +1,384 @@
-# assignment 2
+# Assignment 2
 
+## UVic CSC360 Spring 2025
 
+**Due March 4, at 11:55 pm** via `push` to your `gitlab.csc`
+repository titled "a2". Your repository must contain: 
 
-## Getting started
+1. A `makefile`that creates an executable titled `mts`, 
+when run with command `make mts`. 
 
-To make it easy for you to get started with GitLab, here's a list of recommended next steps.
+2. It is up to you how to structure your files and
+code, but your submission must also include the code 
+behind this `mts` executable - whether it is separated 
+into 1 file, or 100.
 
-Already a pro? Just edit this README.md and make it your own. Want to make it easy? [Use the template at the bottom](#editing-this-readme)!
+To achieve same naming with minimal makefile code, it may be
+simplest to name your main file `mts.c`. Consider, however,
+that it may be of interest to create separate files to handle
+separate parts of your implementation -- guaranteeing clear
+separation of concerns.
 
-## Add your files
+**Note**: Use [`.gitignore`](https://git-scm.com/docs/gitignore/en) to ignore the 
+files that should not be committed to the repository, e.g., the executable file, `.o` object files, etc.
 
-- [ ] [Create](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#create-a-file) or [upload](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#upload-a-file) files
-- [ ] [Add files using the command line](https://docs.gitlab.com/ee/gitlab-basics/add-file.html#add-a-file-using-the-command-line) or push an existing Git repository with the following command:
+## Programming Platform
+
+For this assignment your code must work on the UVic CSC Linux Servers, connection
+to which was covered in Tutorial 1.  You may already have access to your own Unix 
+system (e.g., Ubuntu, Debian, Cygwin on Windows 10, macOS with MacPorts, etc.) yet 
+we recommend you work as much as possible with the Linux environment. 
+
+Bugs in systems programming tend to be platform-specific and something that
+works perfectly at home may end up crashing on a different
+computer-language library configuration. (We cannot give marks for
+submissions of which it is said “It worked in VSCode on my gaming laptop!”)
+
+## Individual work
+
+This assignment is to be completed by each individual student (i.e.,
+no group work).  Naturally you will want to discuss aspects of the
+problem with fellow students, and such discussions are encouraged.
+However, **sharing of code is strictly forbidden**. If you are still
+unsure about what is permitted or have other questions regarding
+academic integrity, please direct them as soon as possible to the
+instructor. (Code-similarity tools will be run on submitted programs.)
+Any fragments of code found on the web and used in your solution must
+be properly cited where it is used (i.e., citation in the form of a
+comment given source of code).
+
+## 1. Introduction
+
+This is an opportunity for you to use -- and perhaps wrestle with --
+concurrency in an imperative programming language such as C. Some of
+the ideas you may use here for solving the problems of cooperating
+and competing threads/tasks can be used in other languages such as Java. 
+
+## 1.1 Goals of this Assignment
+
+Your goal is to construct a simulator of an automated control system for the
+railway track shown in Figure 1 (i.e., to emulate the scheduling of multiple
+threads sharing a common resource in a real OS).
+
+![](./figures/figure1.png)
+
+As shown in Figure 1, there are two stations on each side of the main track.
+The trains on the main track have two priorities: high and low.
+
+At each station, one or more trains are loaded with commodities. Each train
+in the simulation commences its loading process at a common start time 0 of
+the simulation program. Some trains take more time to load, some less. After
+a train is loaded, it patiently awaits permission to cross the main track,
+subject to the requirements specified in Section 3.2. Most importantly, only
+one train can be on the main track at any given time. After a train finishes
+crossing, it magically disappears (i.e., the train thread finishes). 
+
+You need to use `threads` to simulate the trains approaching the main track
+from two different directions, and your program will schedule between them
+to meet the requirements in Section 3.2.
+
+You shall implement your solution in `C` programming language only. Your work
+will be tested on `linux.csc.uvic.ca`, which you can remotely log in by ssh as
+discussed in Tutorial 1. You can also access Linux computers in ECS labs in
+person or remotely by following the guide at
+https://itsupport.cs.uvic.ca/services/e-learning/login_servers/.
+
+**Be sure to test your code on `linux.csc.uvic.ca` before submission.**
+
+## 2. Trains.
+
+Each train, which will be simulated by a thread, has the following attributes:
+
+1. `Number`: An integer uniquely identifying each train, starting from `0`.
+2. `Direction`:
+    + If the direction of a train is `Westbound`, it starts from the East
+    station and travels to the West station.
+    + If the direction of a train is `Eastbound`, it starts from the West
+    station and travels to the East station.
+3. `Priority`: The priority of the station from which it departs.
+4. `Loading Time`: The amount of time that it takes to load it (with goods)
+before it is ready to depart.
+5. `Crossing Time`: The amount of time that the train takes to cross the main 
+track.
+
+Loading time and crossing time are measured in 10ths of a second. These durations
+will be simulated by having your threads, which represent trains, `usleep()` for
+the required amount of time.
+
+### 2.1. Reading the input file
+
+Your program (`mts`) will accept only one command line parameter:
+
++ The parameter is the name of the input file containing the definitions of the 
+trains.
+
+#### 2.1.1. Input file format
+
+The input files have a simple format. Each line contains the information about a
+single train, such that:
+
++ The first field specifies the direction of the train. It is one of the following
+four characters:
+`e`, `E`, `w`, or `W`.
+    + `e` or `E` specifies a train headed East (East-Bound): `e` represents an
+    east-bound low-priority train, and `E` represents an east-bound high-priority
+    train;
+    + `w` or `W` specifies a train headed West (West-Bound): `w` represents a
+    west-bound low-priority train, and `W` represents a west-bound high-priority
+    train.
++ Immediately following (separated by a space) is an integer that indicates the
+loading time of the train.
++ Immediately following (separated by a space) is an integer that indicates the
+crossing time of the train.
++ A newline (\n) ends the line.
+
+Trains are numbered sequentially from 0 according to their order in the input file.
+
+You can use `strtok()` to tokenize each line input. More efficiently, you can use
+`fscanf()`.
+
+Note: You may assume that no more than `999` trains will be provided.
+
+#### 2.1.2. An Example
+
+The following file specifies three trains, two headed East and one headed West.
 
 ```
-cd existing_repo
-git remote add origin https://gitlab.csc.uvic.ca/courses/2025011/CSC360_COSI/assignments/gaiaiturralde/assignment-2.git
-git branch -M main
-git push -uf origin main
+e 10 6
+W 6 7
+E 3 10
 ```
 
-## Integrate with your tools
+It implies the following list of trains:
 
-- [ ] [Set up project integrations](https://gitlab.csc.uvic.ca/courses/2025011/CSC360_COSI/assignments/gaiaiturralde/assignment-2/-/settings/integrations)
+![](./figures/figure2.png)
 
-## Collaborate with your team
+**Note**: Observe that `Train 2` is actually the first to finish the loading
+process.
 
-- [ ] [Invite team members and collaborators](https://docs.gitlab.com/ee/user/project/members/)
-- [ ] [Create a new merge request](https://docs.gitlab.com/ee/user/project/merge_requests/creating_merge_requests.html)
-- [ ] [Automatically close issues from merge requests](https://docs.gitlab.com/ee/user/project/issues/managing_issues.html#closing-issues-automatically)
-- [ ] [Enable merge request approvals](https://docs.gitlab.com/ee/user/project/merge_requests/approvals/)
-- [ ] [Set auto-merge](https://docs.gitlab.com/ee/user/project/merge_requests/merge_when_pipeline_succeeds.html)
+### 3.2 Simulation Rules
 
-## Test and Deploy
+The rules enforced by the automated control system are:
++ Only one train is on the main track at any given time.
++ Only loaded trains can cross the main track.
++ If there are multiple loaded trains, the one with the high priority crosses.
++ If two loaded trains have the same priority, then:
+    + If they are both traveling in the same direction, the train which finished 
+    loading first gets the clearance to cross first. If they finished loading at 
+    the same time, the one that appeared first in the input file gets the clearance 
+    to cross first.
+    + If they are traveling in opposite directions, pick the train which will travel 
+    in the direction opposite of which the last train to cross the main track traveled. 
+    If no trains have crossed the main track yet, the Westbound train has the priority.
++ To avoid starvation, if there are two trains in the same direction traveling through
+the main track **back to back**, the trains waiting in the opposite direction get a
+chance to dispatch one train if any.
 
-Use the built-in continuous integration in GitLab.
+## 3.3. Output
 
-- [ ] [Get started with GitLab CI/CD](https://docs.gitlab.com/ee/ci/quick_start/index.html)
-- [ ] [Analyze your code for known vulnerabilities with Static Application Security Testing (SAST)](https://docs.gitlab.com/ee/user/application_security/sast/)
-- [ ] [Deploy to Kubernetes, Amazon EC2, or Amazon ECS using Auto Deploy](https://docs.gitlab.com/ee/topics/autodevops/requirements.html)
-- [ ] [Use pull-based deployments for improved Kubernetes management](https://docs.gitlab.com/ee/user/clusters/agent/)
-- [ ] [Set up protected environments](https://docs.gitlab.com/ee/ci/environments/protected_environments.html)
+For the example, shown in Section 2.1.2, the correct output is:
 
-***
+```
+00:00:00.3 Train  2 is ready to go East
+00:00:00.3 Train  2 is ON the main track going East
+00:00:00.6 Train  1 is ready to go West
+00:00:01.0 Train  0 is ready to go East
+00:00:01.3 Train  2 is OFF the main track after going East
+00:00:01.3 Train  1 is ON the main track going West
+00:00:02.0 Train  1 is OFF the main track after going West
+00:00:02.0 Train  0 is ON the main track going East
+00:00:02.6 Train  0 is OFF the main track after going East
+```
 
-# Editing this README
+You must:
 
-When you're ready to make this README your own, just edit this file and use the handy template below (or feel free to structure it however you want - this is just a starting point!). Thanks to [makeareadme.com](https://www.makeareadme.com/) for this template.
++ print the arrival of each train at its departure point (after loading)
+using the format string, prefixed by the simulation time:
+    ```
+    "Train %2d is ready to go %4s"
+    ```
++ print the crossing of each train using the format string, prefixed by the
+simulation time:
+    ```
+    "Train %2d is ON the main track going %4s"
+    ```
++ print the arrival of each train (at its destination) using the format string,
+prefixed by the simulation time:
+    ```
+    "Train %2d is OFF the main track after going %4s"
+    ```
 
-## Suggestions for a good README
+where
 
-Every project is different, so consider which of these sections apply to yours. The sections used in the template are suggestions for most open source projects. Also keep in mind that while a README can be too long and detailed, too long is better than too short. If you think your README is too long, consider utilizing another form of documentation rather than cutting out information.
++ There are only two possible values for direction: "East" and "West"
++ Trains have integer identifying numbers. The ID number of a train is specified
+implicitly in the input file. The train specified in the first line of the input
+file has ID number 0.
++ Trains have loading and crossing times in the range of `[1, 99]`.
 
-## Name
-Choose a self-explaining name for your project.
 
-## Description
-Let people know what your project can do specifically. Provide context and add a link to any reference visitors might be unfamiliar with. A list of Features or a Background subsection can also be added here. If there are alternatives to your project, this is a good place to list differentiating factors.
+## 3.4. Manual Pages and other Resources
 
-## Badges
-On some READMEs, you may see small images that convey metadata, such as whether or not all the tests are passing for the project. You can use Shields to add some to your README. Many services also have instructions for adding a badge.
+Be sure to study the man pages for the various functions to be used in the assignment.
+For example, the man page for `pthread_create` can be found by typing the command:
 
-## Visuals
-Depending on what you are making, it can be a good idea to include screenshots or even a video (you'll frequently see GIFs rather than actual videos). Tools like ttygif can help, but check out Asciinema for a more sophisticated method.
+```
+$ man pthread_create
+```
 
-## Installation
-Within a particular ecosystem, there may be a common way of installing things, such as using Yarn, NuGet, or Homebrew. However, consider the possibility that whoever is reading your README is a novice and would like more guidance. Listing specific steps helps remove ambiguity and gets people to using your project as quickly as possible. If it only runs in a specific context like a particular programming language version or operating system or has dependencies that have to be installed manually, also add a Requirements subsection.
+Alternatively, it may be more convenient to view the `pthread_create` documentation
+online here: https://www.man7.org/linux/man-pages/man3/pthread_create.3.html
 
-## Usage
-Use examples liberally, and show the expected output if you can. It's helpful to have inline the smallest example of usage that you can demonstrate, while providing links to more sophisticated examples if they are too long to reasonably include in the README.
+At the end of this assignment you should be familiar with the following functions:
 
-## Support
-Tell people where they can go to for help. It can be any combination of an issue tracker, a chat room, an email address, etc.
+1. File access functions:
 
-## Roadmap
-If you have ideas for releases in the future, it is a good idea to list them in the README.
+    + (a) `atoi`
+    + (b) `fopen`
+    + (c) `feof`
+    + (d) `fgets` and `strtok` and more efficiently you can use `fscanf`
+    + (e) `fwrite` or `fprintf`
+    + (f) `fclose`
 
-## Contributing
-State if you are open to contributions and what your requirements are for accepting them.
+2. Thread creation functions:
 
-For people who want to make changes to your project, it's helpful to have some documentation on how to get started. Perhaps there is a script that they should run or some environment variables that they need to set. Make these steps explicit. These instructions could also be useful to your future self.
+    + (a) `pthread_create`
+    + (b) `pthread_exit`
+    + (c) `pthread_join`
 
-You can also document commands to lint the code or run tests. These steps help to ensure high code quality and reduce the likelihood that the changes inadvertently break something. Having instructions for running tests is especially helpful if it requires external setup, such as starting a Selenium server for testing in a browser.
+3. Mutex manipulation functions:
 
-## Authors and acknowledgment
-Show your appreciation to those who have contributed to the project.
+    + (a) `pthread_mutex_init`
+    + (b) `pthread_mutex_lock`
+    + (c) `pthread_mutex_unlock`
 
-## License
-For open source projects, say how it is licensed.
+4. Condition variable manipulation functions:
 
-## Project status
-If you have run out of energy or time for your project, put a note at the top of the README saying that development has slowed down or stopped completely. Someone may choose to fork your project or volunteer to step in as a maintainer or owner, allowing your project to keep going. You can also make an explicit request for maintainers.
+    + (a) `pthread_cond_init`
+    + (b) `pthread_cond_wait`
+    + (c) `pthread_cond_broadcast`
+    + (d) `pthread_cond_signal`
+
+It is critical that you read the man pages, and attend the tutorials. 
+Your best source of information, as always, is the man pages.
+
+For help with the POSIX interface (in general): http://www.opengroup.org/onlinepubs/007908799/
+
+For help with POSIX threads: http://www.opengroup.org/onlinepubs/007908799/xsh/pthread.h.html
+
+A good overview of pthread can be found at: http://computing.llnl.gov/tutorials/pthreads/
+
+
+# 4. Design considerations:
+
+It may help you to write a design document which answers the following questions. 
+It is recommended that you think through the questions very carefully before starting 
+to write code.
+
+Unlike P1, no amount of debugging will help after the basic design has been coded. 
+Therefore, it is very important to ensure that the basic design is correct. So, 
+think about the following for a few days and then write down the answers for your own 
+reference. It may help to discuss with peers or your TAs during tutorial. 
+
++ How many threads are you going to use? Consider the work that you intend each thread 
+to perform.
++ Do the threads work independently? Or, is there an overall “controller” thread?
++ How many mutexes are you going to use? Specify the operation that each mutex 
+will guard.
++ Will the main thread be idle? If not, what will it be doing?
++ How are you going to represent stations (which are collections of loaded trains 
+ready to depart)? 
+That is, what type of data structure will you use?
++ How are you going to ensure that data structures in your program will not be 
+modified concurrently?
++ How many convars are you going to use? For each convar:
+    + Which mutex is associated with the convar? Why?
+    + What operation should be performed once `pthread_cond_wait()` has been unblocked 
+    and re-acquired the mutex?
+
+
+
+## 4.1 A Note on thread behaviour and proper practice
+
+You will notice when you write a solution that the pthread scheduling
+of threads is a little unpredictable. There may be some inconsistency in
+which threads run first -- this is a symptom of concurrent code,
+which may be amplified by core clock discrepancies. This is up to you to
+handle with a combination on synchronization primitives you believe best 
+suited to the problem.
+
+
+Ordinarily, we would not want to initialize up to 999 threads. When 
+instantiating threads, it is often more convenient and resource-safe
+to set a maximum amount of threads and utilize a **thread pool** to handle
+thread allocation and processing. Many languages have library support for
+thread pools and C is no exception. However, the DIY nature of C libraries 
+mean that you must go find the library best suited to your task and include
+it. For instance, this implementation: https://github.com/Pithikos/C-Thread-Pool.
+
+---
+
+## 4.2 Solution Restrictions:
+
+You may only use C libraries available on the Linux CSC servers. Beyond that,
+there are no restrictions on which libraries you may use -- so long as your 
+output matches the test cases and example output. 
+
+## Submitting your work
+
+You must push changes to your files back to the `a2` directory of the
+`gitlab.csc` repository provided to you the due date.  Only the files
+used to create the `mts` executable and the executable itself will be
+marked; any other files in this directory will be disregarded (but
+please recall the comment above regarding keeping a clean repository
+with `.gitignore`.)
+
+Your work MUST be on `gitlab.csc` to be marked – commit and push
+your code often, and double-check that your submission is successful
+by checking `https://gitlab.csc.uvic.ca/`.
+
+Any code submitted which has been taken from the web or from textbooks, LLMs,
+must be properly cited – where used – in a code comment. Note that claiming
+work that is not your own by not citing constitutes as plagiarism and may result
+in penalty.
+
+---
+
+## Evaluation
+
+**Note: Up to five students may each be asked to demonstrate their work to
+the teaching team before their final assignment evaluation is provided
+to them.**
+
+80% of the mark for this assignment is related to implementation *correctness*, and 
+will be evaluated by automated testing scripts. There are between 8-16 test cases, 
+marks will be distributed equally across these test cases. The test cases will be
+released after the marks are complete, to allow for students to self-evaluate their
+code in case of any marking issues. 
+
+20% of the mark for this assignment will pertain to code quality. While code quality
+is often perceived as a fairly objective quality, we can establish a general playbook
+to consider while developing code:
+
+- Proper decomposition of a program into subroutines — A 500 line program as a single
+routine won't suffice.
+- Comment - judiciously, but not profusely. Comments serve to help a marker. To further
+elaborate:
+  - Your favorite quote from Star Wars does not count as comments. In fact, they simply
+  count as anti-comments, and will result in a loss of marks.
+
+- Proper variable names, `int a;` is not a good variable name, it never was and never will
+be.
+- Small number of global variables, if any. Most programs need a very small number of global
+variables, if any. (If you have a global variable named temp, think again.)
+- The return values from all system calls should be checked and all values should be dealt
+with appropriately.
+- If you are in doubt about how to write good C code, you can easily find many C style guides
+on the Net. 
+The Indian Hill Style Guide http://www.cs.arizona.edu/~mccann/cstyle.html is an excellent short
+style guide.
+
+---
+
+Special thanks to J. Pan for original assignment structure and concept. Modifications made by 
+Konrad Jasman for ease of marking, clarity and streamlining development in the Spring 2025 term. 
