@@ -80,5 +80,6 @@ int main(int argc, char **argv){
     }
  
     printf("-----> End \n");
-    return 0;
+    pthread_exit(NULL);
+
 }
