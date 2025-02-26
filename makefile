@@ -1,2 +1,2 @@
 mts: mts.o
-	gcc -o mts mts.c
+	gcc -pthread -o mts mts.c
