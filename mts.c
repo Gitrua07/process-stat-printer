@@ -11,7 +11,8 @@ struct train{
     int cross_time;
 };
 
-struct train train_data[75]; // Holds train attributes
+struct train train_data[75]; /* Holds train attributes */
+pthread_mutex_t count_mutex; /* Holds mutex */
 
 void *loading_time(void *index){ /* Add locks and conditions here*/
     /*
@@ -22,12 +23,25 @@ void *loading_time(void *index){ /* Add locks and conditions here*/
      *
      */
 
-     usleep(train_data[(intptr_t)index].load_time);
-     pthread_exit(NULL);
+     double new_time = ((double)train_data[(intptr_t)index].load_time)/10;
+
+     usleep((useconds_t)(new_time * 1000000));
+
+     pthread_mutex_lock(&count_mutex); /* Locks code below */
+     char *dir; 
+     if(strcmp(train_data[(intptr_t)index].train_direction, "W")==0 || strcmp(train_data[(intptr_t)index].train_direction, "w")==0){
+         dir = "West";
+     }else{
+         dir = "East";
+     }
+     printf("00:00:0%.1f ", new_time);
+     printf("Train %2ld is ready to go %4s\n", (intptr_t)index, dir);
+     pthread_mutex_unlock(&count_mutex); /* Unlocks code for other threads */
+     pthread_exit(NULL); 
 
 }
 
-void train_departs(int index){
+void *train_departs(void *index){
     /*
      * Function: train_departs
      *
@@ -35,10 +49,11 @@ void train_departs(int index){
      *      index: the number of the train to depart
      *
      */
+     pthread_exit(NULL); 
 }
 
-void crossing_time(int index){
-      /*
+void *crossing_time(void *index){
+    /*
      * Function: crossing_time
      *
      * Parameters: 
@@ -46,10 +61,16 @@ void crossing_time(int index){
      *
      */
 
+
+
+     pthread_exit(NULL); 
+
 }
 
 int main(int argc, char **argv){ 
     pthread_t threads[75];
+
+    pthread_mutex_init(&count_mutex, NULL); /* Initializes mutex */
 
     FILE *input = fopen(argv[1], "r");
     if(input == NULL){
@@ -63,23 +84,17 @@ int main(int argc, char **argv){
         num_trains++;
     }
 
-    printf("Number of trains: %d\n", num_trains);
-
-    // Next part
-    int i;
-    for(i = 0; i < num_trains; i++){
+    for(int i = 0; i < num_trains; i++){
         pthread_create(&threads[i], NULL, loading_time, (void *)(intptr_t)i); /* Loads the trains */
-
-        char *dir; 
-        if(strcmp(train_data[i].train_direction, "W")==0 || strcmp(train_data[i].train_direction, "w")==0){
-            dir = "West";
-        }else{
-            dir = "East";
-        }
-        printf("Train %2d is ready to go %4s\n", i, dir);
+        pthread_create(&threads[i], NULL, train_departs, (void *)(intptr_t)i); /* Decides which train to enter the main track*/
+        pthread_create(&threads[i], NULL, crossing_time, (void *)(intptr_t)i); /* Prints out that train has crossed */
     }
- 
-    printf("-----> End \n");
+
+    for(int i=0; i< num_trains; i++){
+        pthread_join(threads[i], NULL); /* Wait for threads to all complete */
+    }
+    
+    pthread_mutex_destroy(&count_mutex);
     pthread_exit(NULL);
 
 }
