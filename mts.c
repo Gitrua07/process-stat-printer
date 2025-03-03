@@ -46,8 +46,7 @@ void *loading_time(void *index){ /* Add locks and conditions here*/
         printf("Train %2ld is ready to go East\n", (intptr_t)index);
         direction = "East";
      }
-     //train_index = (intptr_t)index;
-
+     
      load_done = 1;
      pthread_cond_signal(&count_cond); /* Signals load time is finished */
      pthread_mutex_unlock(&count_mutex); /* Unlocks code for other threads */
@@ -93,25 +92,6 @@ void *train_departs(void *index){
      load_done = 0;
 
      pthread_exit(NULL); 
-}
-
-void *crossing_time(void *index){
-    /*
-     * Function: crossing_time
-     *
-     * Parameters: 
-     *      index: the number of the train to cross
-     *
-     */
-     /*pthread_mutex_lock(&mutex_cond3);
-     while(load_done2==0){
-        pthread_cond_wait(&count_cond2, &mutex_cond3);
-
-     }
-     pthread_mutex_lock(&mutex_cond3);*/
-
-     pthread_exit(NULL); 
-
 }
 
 int main(int argc, char **argv){ 
