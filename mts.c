@@ -1,9 +1,9 @@
 #include <pthread.h>
 #include <stdio.h>
 #include <unistd.h>
-#include <sys/wait.h>
 #include <stdint.h>
 #include <string.h>
+#include <time.h>
 
 struct train{ 
     char train_direction[2];
