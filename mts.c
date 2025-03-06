@@ -4,52 +4,187 @@
 #include <stdint.h>
 #include <string.h>
 #include <time.h>
+#include <sys/wait.h>
 
+
+/**
+ * Struct contains train data
+ */
 struct train{ 
+    
     char train_direction[2];
     int load_time;
     int cross_time;
 };
 
-int queue[75]; /* Line 14 - 41: Helped by ChatGPT */
-int head = 0, tail = 0;
-int q_size = 0;
+/* 
+    Priority Queue Implementation
+    Source - https://www.geeksforgeeks.org/c-program-to-implement-priority-queue/
+*/
 
-int isEmpty() {
-    return head == tail;
+typedef struct {
+    int load_time[75];
+    int train_index[75];
+    int size;
+} PriorityQueue;
+
+/**
+ * Swaps two variables
+ * 
+ * @param a1 The first variable that swaps with a2
+ * @param a2 The second variable that swaps with a1
+ */
+void swap(int* a1, int* a2){
+    int temp = *a1;
+    *a1 = *a2;
+    *a2 = temp;
 }
 
-int isFull() {
-    return (tail + 1) % 75 == head;
+/**
+ * Checks if the min heap structure is maintained. If not, then it will correct it by comparing
+ * if the parent is greater than child. Swaps anything that is true to the statement.
+ * 
+ * @param train A priority queue which holds the loading_time for the train
+ * @param index The index of the current train
+ */
+void heapifyUp(PriorityQueue* train, int index){
+    if(index && train->load_time[(index-1)/2] > train->load_time[index]){ /* If loading time in parent is greater than child */
+        swap(&train->load_time[(index-1)/2], &train->load_time[index]);
+        swap(&train->train_index[(index-1)/2], &train->train_index[index]);
+        heapifyUp(train, train->load_time[(index-1)/2]);
+    }
 }
 
-void enqueue(int train_index) {
-    if (isFull()) {
-        printf("Queue is full! Cannot enqueue train %d.\n", train_index);
+/**
+ * Adds new loading time values to priority queue
+ * 
+ * @param train The priority queue to that holds load time
+ * @param value The new value to be inserted into train
+ */
+void enqueue(PriorityQueue* train, int value, int value2){
+    if(train->size == 75){
+        printf("Queue is full\n");
         return;
     }
-    queue[tail] = train_index;
-    tail = (tail + 1) % 75;
-    q_size++;
+
+    train->load_time[train->size++] = value;
+    train->train_index[train->size++] = value2;
+    heapifyUp(train, train->size-1);
 }
 
-int dequeue() {
-    if (isEmpty()) {
-        return -1;  // Queue is empty
+/**
+ * Checks if min heap structure is maintained at bottom.
+ * If not, it will swap left or right with current index.
+ * 
+ * @param train The priority queue that contains load time
+ * @param index The index of the current train
+ */
+void heapifyDown(PriorityQueue* train, int index){
+    int smallest = index;
+    int left = 2 * index + 1; /* Left index */
+    int right = 2 * index + 2; /* Right index */
+
+    if(left < train->size && train->load_time[left] < train->load_time[smallest]){
+        smallest = left;
     }
-    int train = queue[head];
-    head = (head + 1) % 75;
-    q_size--;
-    return train;
+
+    if(right < train->size && train->load_time[right] < train->load_time[smallest]){
+        smallest = right;
+    }
+
+    if(smallest != index){
+        swap(&train->load_time[index], &train->load_time[smallest]);
+        swap(&train->train_index[index], &train->train_index[smallest]);
+        heapifyDown(train, smallest);
+    }
+}
+
+/**
+ * Takes out the top item in a priority queue
+ * 
+ * @param train The priority queue that contains load time
+ * @return Returns the first index in priority queue
+ */
+int dequeue(PriorityQueue* train){
+    if(train->size == 0){
+        printf("Priority Queue is empty\n");
+        return -1;
+    }
+    int eject = train->train_index[0];
+    train->load_time[0] = train->load_time[train->size--];
+    train->train_index[0] = train->train_index[train->size--];
+    heapifyDown(train, 0);
+    return eject;
+}
+
+/**
+ * Peeks at the first item in the priority queue
+ * 
+ * @param train The priority queue that contains load time
+ * @return Returns the first item in priority queue
+ */
+int peek(PriorityQueue* train){
+    if(train->size == 0){
+        printf("Train is empty\n");
+        return -1;
+    }
+    return train->load_time[0];
+}
+
+PriorityQueue train_west = {{0}, 0}; /* Initialized priority queue */
+PriorityQueue train_east = {{0}, 0};
+
+struct timespec start, end; /* Beginning and end of clock timer */
+long elapsed_seconds = 0;
+long elapsed_nanoseconds = 0;
+
+void beginTime(){
+    int time = clock_gettime(CLOCK_REALTIME, &start);
+
+    if(time == -1){
+        printf("Error in time\n");
+        return;
+    }
+
 }
 
 struct train train_data[75]; /* Holds train attributes */
 pthread_mutex_t count_mutex; /* Holds mutex */
+pthread_mutex_t main_lock; /* locks the main function */
+
 pthread_cond_t count_cond; /* Holds conditions */
 
+
 int load_done = 0; /* Checks if loading time is done. 0: Not done, 1: done */
-int load_done2 = 0;
-int train_index = 0;
+
+void getTime(){
+    int time = clock_gettime(CLOCK_REALTIME, &end);
+
+    if(time == -1){
+        printf("Clock error");
+        return;
+    }
+
+    /* Line 195 - 211: Generated by ChatGPT */
+    elapsed_seconds = end.tv_sec - start.tv_sec;
+    elapsed_nanoseconds = end.tv_nsec - start.tv_nsec;
+    
+    // Adjust for negative nanoseconds (borrow 1 second)
+    if (elapsed_nanoseconds < 0) {
+        elapsed_seconds -= 1;
+        elapsed_nanoseconds += 1000000000;
+    }
+    
+    // Convert to hh:mm:ss.ms format
+    int hours = elapsed_seconds / 3600;
+    int minutes = (elapsed_seconds % 3600) / 60;
+    int seconds = elapsed_seconds % 60;
+    int milliseconds = elapsed_nanoseconds / 1000000;
+    
+    // Print formatted time
+    printf("%02d:%02d:%02d.%01d ", hours, minutes, seconds, milliseconds / 100);
+
+}
 
 void *loading_time(void *index){ /* Add locks and conditions here*/
     /*
@@ -64,22 +199,27 @@ void *loading_time(void *index){ /* Add locks and conditions here*/
      int index_l = (intptr_t)index;
 
      double new_time = (double)(load_time_l)/10;
-     useconds_t load_time2 = (useconds_t)(new_time * 1000000);
+     unsigned int load_time2 = new_time * 1000000;
      usleep(load_time2); /* Loads time */
      
-     printf("00:00:0%.1f ", new_time);
-     
+     getTime();
+
      char *direction;
      if(strcmp(train_direction_l, "W")==0 || strcmp(train_direction_l, "w")==0){
-         direction = "West";    
-     }else{
-        direction = "East";
-     }
+        direction = "West";     
+    }else{
+       direction = "East";
+    }
+
      printf("Train %2d is ready to go %s\n", index_l, direction);
 
-     enqueue(index_l);
-
-     pthread_mutex_lock(&count_mutex); /* Locks code below */
+     pthread_mutex_lock(&count_mutex);
+     if(strcmp(train_direction_l, "W")==0 || strcmp(train_direction_l, "w")==0){
+         enqueue(&train_west, load_time_l, index_l);
+     }else{
+        enqueue(&train_east,  load_time_l, index_l);
+     }
+     
      load_done = 1;
      pthread_cond_broadcast(&count_cond); /* Signals load time is finished */
      pthread_mutex_unlock(&count_mutex); /* Unlocks code for other threads */
@@ -93,12 +233,15 @@ void *train_departs(void *index){
      * Function: train_departs
      *
      */
+
      int t_ind = (intptr_t)index;
 
         /* Output train on track */
         char *t_dir = train_data[t_ind].train_direction;
-        int load_time_l = train_data[t_ind].load_time;
         int cross_time_l = train_data[t_ind].cross_time;
+        
+        double new_cross_time = (double)(cross_time_l)/10;
+        unsigned int load_time2 = new_cross_time * 1000000;
 
         char *dir;
         if(strcmp(t_dir, "W")==0 || strcmp(t_dir, "w")==0){
@@ -107,102 +250,62 @@ void *train_departs(void *index){
            dir = "East";
         }
 
-        double new_time = (double)(load_time_l)/10;
-        double new_cross_time = (double)(cross_time_l)/10;
-        double time_l = new_cross_time + new_time;
-        useconds_t load_time2 = (useconds_t)(new_cross_time * 1000000);
-
+        getTime();
         pthread_mutex_lock(&count_mutex);
         /* Output that train is on main track */
-        printf("00:00:0%.1f Train %2d is ON the main track going %4s\n", new_time, t_ind, dir);
+        printf("Train %2d is ON the main track going %4s\n", t_ind, dir);
+
         pthread_mutex_unlock(&count_mutex);
 
         usleep(load_time2); /* Loads time */
 
+        getTime();
         pthread_mutex_lock(&count_mutex);
         /* Output that train is OFF the main track */
-        printf("00:00:0%.1f Train %2d is OFF the main track after going %4s\n", time_l, t_ind, dir);
-        load_done = 1;
-        pthread_cond_broadcast(&count_cond); /* Signals load time is finished */
+        printf("Train %2d is OFF the main track after going %4s\n", t_ind, dir);
+        //load_done = 1;
+        //pthread_cond_broadcast(&count_cond); /* Signals load time is finished */
         pthread_mutex_unlock(&count_mutex);
     
     pthread_exit(NULL); 
 }
 
-int is_high_priority(char direction){
-    return (direction == 'W' || direction == 'E'); 
-}
+ int find_index(){
+    int i;
+    int train_ind_wl = train_west.train_index[i];
+    int train_ind_el = train_east.train_index[i];
+    char *train_dir_wl = train_data[train_ind_wl].train_direction;
+    char *train_dir_el = train_data[train_ind_el].train_direction;
 
-int choose_trains(int curr_ind, int best_ind){
-
-    char train_1 = train_data[queue[curr_ind]].train_direction[0];
-    char train_2 = train_data[queue[best_ind]].train_direction[0];
-
-    int train_1_l = train_data[queue[curr_ind]].load_time;
-    int train_2_l = train_data[queue[best_ind]].load_time;
-
-    int priority_1 = is_high_priority(train_1);
-    int priority_2 = is_high_priority(train_2);
-
-    if(priority_1 < priority_2){
+    if(train_west.size < 1 && train_east.size < 1){ /* Empty queue */
         return -1;
     }
-    
-    if(priority_1 > priority_2){
-        return 1;
+
+    if(train_west.size == 0 && train_east.size > 0){ /* Train is only going west*/
+        for(i = 0; i < train_east.size-1; i++){
+            if(strcmp(train_dir_el, "E") == 0){
+                return dequeue(&train_east);
+            }
+        }
+        return dequeue(&train_east);
     }
 
-   if(train_1_l < train_2_l){
-    return 1;
-   }
-
-    if(train_1_l > train_2_l){
-    return -1;
+    if(train_west.size > 0 && train_east.size == 0 ){ /* Train is only going east */
+        for(i = 0; i < train_west.size-1; i++){
+            if(strcmp(train_dir_wl, "W") == 0){
+                return dequeue(&train_west);
+            }
+        }
+        return dequeue(&train_west);
     }
-    
-    if(curr_ind < best_ind){
-        return 1;
+
+    if(peek(&train_west) > peek(&train_east)){
+        return dequeue(&train_east);
     }else{
-        return -1;
-    }
-        
-
-    
-}
-
-int find_index(){
-
-    if(q_size == 0){
-        return -1;
+        return dequeue(&train_west);
     }
 
-    int index = head;
-
-    for(int i = head+1; i != tail; i  = (i + 1) % 75){
-        if(choose_trains(i, index) == 1){
-            index = i;
-        }
-    }
-
-    int temp[75];
-    int index_value;
-    int selected_train = -1;
-    int temp_index = 0;
-
-    while(!isEmpty()){
-        index_value = dequeue();
-        if(index_value == queue[index] && selected_train == -1){
-            selected_train = index_value;
-        }else{
-            temp[temp_index++] = index_value;
-        }
-    }
-
-    for(int i = 0; i < temp_index; i++){
-        enqueue(temp[i]);
-    }
-
-    return selected_train;
+    return -1;
 }
 
 int main(int argc, char **argv){ 
@@ -211,6 +314,7 @@ int main(int argc, char **argv){
     int j = -1;
 
     pthread_mutex_init(&count_mutex, NULL); /* Initializes mutex */
+    pthread_mutex_init(&main_lock, NULL);
     pthread_cond_init(&count_cond, NULL); /* Initializes condition */
 
     FILE *input = fopen(argv[1], "r");
@@ -225,34 +329,30 @@ int main(int argc, char **argv){
         num_trains++;
     }
 
+    beginTime();
+
     for(int i = 0; i < num_trains; i++){
         pthread_create(&threads[i], NULL, loading_time, (void *)(intptr_t)i); /* Loads the trains and decides which train to enter the main track */
     }
 
-    for(int i = 0; i < num_trains; i++){ /* Waits until train is ready to cross */
+     for(int i = 0; i < num_trains; i++){  /* Waits until train is ready to cross */
         
         pthread_mutex_lock(&count_mutex);
-
         while(load_done == 0){
             pthread_cond_wait(&count_cond,&count_mutex);
         }
+        load_done = 0;
+        pthread_mutex_unlock(&count_mutex);
         
         int j = find_index();
-       //int j = dequeue();
-
-        if (j == -1) {
+         if (j == -1) {
             pthread_mutex_unlock(&count_mutex);
             break;
         }
 
+        //printf("Next index is - %d\n", j);
         pthread_create(&thread2, NULL, train_departs, (void*)(intptr_t)j);
-        pthread_mutex_unlock(&count_mutex);
-        
-        pthread_mutex_lock(&count_mutex);
-        load_done = 0;
-        pthread_mutex_unlock(&count_mutex);
-
-    }
+    } 
 
     for(int i=0; i< num_trains; i++){
         pthread_join(threads[i], NULL); /* Wait for threads to all complete */
@@ -261,6 +361,7 @@ int main(int argc, char **argv){
     pthread_join(thread2, NULL);
     
     pthread_mutex_destroy(&count_mutex);
+    pthread_mutex_destroy(&main_lock);
     pthread_cond_destroy(&count_cond);
 
     pthread_exit(NULL);
