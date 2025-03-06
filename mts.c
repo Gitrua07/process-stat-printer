@@ -6,13 +6,14 @@
 #include <string.h>
 
 struct train{ 
-    char train_direction[1];
+    char train_direction[2];
     int load_time;
     int cross_time;
 };
 
 int queue[75]; /* Line 14 - 41: Helped by ChatGPT */
 int head = 0, tail = 0;
+int q_size = 0;
 
 int isEmpty() {
     return head == tail;
@@ -29,6 +30,7 @@ void enqueue(int train_index) {
     }
     queue[tail] = train_index;
     tail = (tail + 1) % 75;
+    q_size++;
 }
 
 int dequeue() {
@@ -37,19 +39,17 @@ int dequeue() {
     }
     int train = queue[head];
     head = (head + 1) % 75;
+    q_size--;
     return train;
 }
 
 struct train train_data[75]; /* Holds train attributes */
 pthread_mutex_t count_mutex; /* Holds mutex */
-pthread_mutex_t mutex_cond;
-pthread_mutex_t mutex_cond3;
 pthread_cond_t count_cond; /* Holds conditions */
-pthread_cond_t count_cond2;
+
 int load_done = 0; /* Checks if loading time is done. 0: Not done, 1: done */
 int load_done2 = 0;
 int train_index = 0;
-//double curr_time = 0;
 
 void *loading_time(void *index){ /* Add locks and conditions here*/
     /*
@@ -77,7 +77,6 @@ void *loading_time(void *index){ /* Add locks and conditions here*/
      }
      printf("Train %2d is ready to go %s\n", index_l, direction);
 
-     //add to queue - choose which train to use enqueue here OR don't enqueue here but in main()
      enqueue(index_l);
 
      pthread_mutex_lock(&count_mutex); /* Locks code below */
@@ -109,36 +108,110 @@ void *train_departs(void *index){
         }
 
         double new_time = (double)(load_time_l)/10;
-        //double new_time = curr_time;
         double new_cross_time = (double)(cross_time_l)/10;
         double time_l = new_cross_time + new_time;
         useconds_t load_time2 = (useconds_t)(new_cross_time * 1000000);
 
         pthread_mutex_lock(&count_mutex);
-
         /* Output that train is on main track */
         printf("00:00:0%.1f Train %2d is ON the main track going %4s\n", new_time, t_ind, dir);
+        pthread_mutex_unlock(&count_mutex);
 
         usleep(load_time2); /* Loads time */
 
+        pthread_mutex_lock(&count_mutex);
         /* Output that train is OFF the main track */
         printf("00:00:0%.1f Train %2d is OFF the main track after going %4s\n", time_l, t_ind, dir);
-
+        load_done = 1;
+        pthread_cond_broadcast(&count_cond); /* Signals load time is finished */
         pthread_mutex_unlock(&count_mutex);
     
     pthread_exit(NULL); 
 }
 
+int is_high_priority(char direction){
+    return (direction == 'W' || direction == 'E'); 
+}
+
+int choose_trains(int curr_ind, int best_ind){
+
+    char train_1 = train_data[queue[curr_ind]].train_direction[0];
+    char train_2 = train_data[queue[best_ind]].train_direction[0];
+
+    int train_1_l = train_data[queue[curr_ind]].load_time;
+    int train_2_l = train_data[queue[best_ind]].load_time;
+
+    int priority_1 = is_high_priority(train_1);
+    int priority_2 = is_high_priority(train_2);
+
+    if(priority_1 < priority_2){
+        return -1;
+    }
+    
+    if(priority_1 > priority_2){
+        return 1;
+    }
+
+   if(train_1_l < train_2_l){
+    return 1;
+   }
+
+    if(train_1_l > train_2_l){
+    return -1;
+    }
+    
+    if(curr_ind < best_ind){
+        return 1;
+    }else{
+        return -1;
+    }
+        
+
+    
+}
+
+int find_index(){
+
+    if(q_size == 0){
+        return -1;
+    }
+
+    int index = head;
+
+    for(int i = head+1; i != tail; i  = (i + 1) % 75){
+        if(choose_trains(i, index) == 1){
+            index = i;
+        }
+    }
+
+    int temp[75];
+    int index_value;
+    int selected_train = -1;
+    int temp_index = 0;
+
+    while(!isEmpty()){
+        index_value = dequeue();
+        if(index_value == queue[index] && selected_train == -1){
+            selected_train = index_value;
+        }else{
+            temp[temp_index++] = index_value;
+        }
+    }
+
+    for(int i = 0; i < temp_index; i++){
+        enqueue(temp[i]);
+    }
+
+    return selected_train;
+}
+
 int main(int argc, char **argv){ 
     pthread_t threads[75];
     pthread_t thread2;
+    int j = -1;
 
     pthread_mutex_init(&count_mutex, NULL); /* Initializes mutex */
-    pthread_mutex_init(&mutex_cond, NULL);
-    pthread_mutex_init(&mutex_cond3, NULL);
-
     pthread_cond_init(&count_cond, NULL); /* Initializes condition */
-    pthread_cond_init(&count_cond2, NULL);
 
     FILE *input = fopen(argv[1], "r");
     if(input == NULL){
@@ -163,15 +236,20 @@ int main(int argc, char **argv){
         while(load_done == 0){
             pthread_cond_wait(&count_cond,&count_mutex);
         }
+        
+        int j = find_index();
+       //int j = dequeue();
 
-        int j = dequeue();
+        if (j == -1) {
+            pthread_mutex_unlock(&count_mutex);
+            break;
+        }
+
         pthread_create(&thread2, NULL, train_departs, (void*)(intptr_t)j);
-
         pthread_mutex_unlock(&count_mutex);
-
+        
         pthread_mutex_lock(&count_mutex);
         load_done = 0;
-        pthread_cond_broadcast(&count_cond); /* Signal next train */
         pthread_mutex_unlock(&count_mutex);
 
     }
@@ -183,11 +261,7 @@ int main(int argc, char **argv){
     pthread_join(thread2, NULL);
     
     pthread_mutex_destroy(&count_mutex);
-    pthread_mutex_destroy(&mutex_cond);
-    pthread_mutex_destroy(&mutex_cond3);
-
     pthread_cond_destroy(&count_cond);
-    pthread_cond_destroy(&count_cond2);
 
     pthread_exit(NULL);
 
