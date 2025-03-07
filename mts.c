@@ -6,6 +6,8 @@
 #include <time.h>
 #include <sys/wait.h>
 
+int consecutive_west = 0;
+int consecutive_east = 0;
 /**
  * Struct contains train data
  */
@@ -43,6 +45,9 @@ typedef struct
 {
     char t_dir[75];
     int train_index[75];
+    // temp
+    double ready_time[75];
+    // temp
     int size;
 } PriorityQueue;
 
@@ -92,10 +97,15 @@ void heapifyUp(PriorityQueue *train, int index)
     int parent_priority = get_priority(train->t_dir[parent]);
 
     if (curr_priority > parent_priority ||
-        (curr_priority == parent_priority && train->train_index[index] < train->train_index[parent]))
+        (curr_priority == parent_priority &&
+         (train->ready_time[index] < train->ready_time[parent] ||
+          (train->ready_time[index] == train->ready_time[parent] && train->train_index[index] < train->train_index[parent]))))
     {
         swap2(&train->t_dir[parent], &train->t_dir[index]);
         swap(&train->train_index[parent], &train->train_index[index]);
+        double temp = train->ready_time[parent];
+        train->ready_time[parent] = train->ready_time[index];
+        train->ready_time[index] = temp;
         heapifyUp(train, parent);
     }
 }
@@ -107,7 +117,7 @@ void heapifyUp(PriorityQueue *train, int index)
  * @param value The new train direction to be inserted into train which defines priority
  * @param value2 The new index to be inserted into train
  */
-void enqueue(PriorityQueue *train, char value, int value2)
+void enqueue(PriorityQueue *train, char value, int value2, double value3)
 {
     if (train->size == 75)
     {
@@ -117,9 +127,9 @@ void enqueue(PriorityQueue *train, char value, int value2)
 
     train->t_dir[train->size] = value;
     train->train_index[train->size] = value2;
+    train->ready_time[train->size] = value3;
     heapifyUp(train, train->size);
     train->size++;
-
 }
 
 /**
@@ -138,7 +148,9 @@ void heapifyDown(PriorityQueue *train, int index)
     if (left < train->size &&
         (get_priority(train->t_dir[left]) > get_priority(train->t_dir[highest]) ||
          (get_priority(train->t_dir[left]) == get_priority(train->t_dir[highest]) &&
-          train->train_index[left] < train->train_index[highest])))
+          (train->ready_time[left] < train->ready_time[highest] ||
+           (train->ready_time[left] == train->ready_time[highest] &&
+            train->train_index[left] < train->train_index[highest])))))
     {
         highest = left;
     }
@@ -146,7 +158,8 @@ void heapifyDown(PriorityQueue *train, int index)
     if (right < train->size &&
         (get_priority(train->t_dir[right]) > get_priority(train->t_dir[highest]) ||
          (get_priority(train->t_dir[right]) == get_priority(train->t_dir[highest]) &&
-          train->train_index[right] < train->train_index[highest])))
+          (train->ready_time[right] < train->ready_time[highest] ||
+           (train->ready_time[right] == train->ready_time[highest] && train->train_index[right] < train->train_index[highest])))))
     {
         highest = right;
     }
@@ -155,6 +168,9 @@ void heapifyDown(PriorityQueue *train, int index)
     {
         swap2(&train->t_dir[index], &train->t_dir[highest]);
         swap(&train->train_index[index], &train->train_index[highest]);
+        double temp = train->ready_time[highest];
+        train->ready_time[highest] = train->ready_time[index];
+        train->ready_time[index] = temp;
         heapifyDown(train, highest);
     }
 }
@@ -178,6 +194,7 @@ int dequeue(PriorityQueue *train)
 
     train->train_index[0] = train->train_index[train->size - 1];
     train->t_dir[0] = train->t_dir[train->size - 1];
+    train->ready_time[0] = train->ready_time[train->size - 1];
 
     train->size--;
 
@@ -303,17 +320,17 @@ void *loading_time(void *index)
     printf("%s Train %2d is ready to go %s\n", time_buffer, index_l, direction);
 
     pthread_mutex_unlock(&count_mutex);
-
+    double ready_timestamp = elapsed_seconds + elapsed_nanoseconds / 1e9; // temp
     if (strcmp(train_direction_l, "W") == 0 || strcmp(train_direction_l, "w") == 0)
     {
         pthread_mutex_lock(&train_mutex_west);
-        enqueue(&train_west, load_time_l, index_l);
+        enqueue(&train_west, train_data[index_l].train_direction[0], index_l, ready_timestamp); // temp: remove read_timestamp
         pthread_mutex_unlock(&train_mutex_west);
     }
     else
     {
         pthread_mutex_lock(&train_mutex_east);
-        enqueue(&train_east, load_time_l, index_l);
+        enqueue(&train_east, train_data[index_l].train_direction[0], index_l, ready_timestamp);
         pthread_mutex_unlock(&train_mutex_east);
     }
 
@@ -382,12 +399,13 @@ void *train_departs(void *index)
  */
 int find_index()
 {
+   // printf("current size is: %d\n", train_west.size + train_east.size);
 
     int train_ind_wl = train_west.train_index[0];
     int train_ind_el = train_east.train_index[0];
 
-    int train_wl_load = train_data[train_ind_wl].load_time;
-    int train_el_load = train_data[train_ind_el].load_time;
+    double train_wl_load = train_west.ready_time[0];
+    double train_el_load = train_east.ready_time[0];
 
     int train_wl_priority = get_priority(train_west.t_dir[0]);
     int train_el_priority = get_priority(train_east.t_dir[0]);
@@ -399,71 +417,108 @@ int find_index()
 
     if (train_west.size == 0 && train_east.size > 0)
     { /* Train is only going west*/
+        consecutive_east++;
+        consecutive_west = 0;
         last_direction = 'E';
         return peek(&train_east);
     }
 
     if (train_west.size > 0 && train_east.size == 0)
     { /* Train is only going east */
+        consecutive_west++;
+        consecutive_east = 0;
         last_direction = 'W';
         return peek(&train_west);
     }
 
+    if(consecutive_west > 1){
+        return peek(&train_east);
+    }
+
+    if(consecutive_east > 1){
+        return peek(&train_west);
+    }
+
+   // printf("Consecutive west = %d\n", consecutive_west);
+
+    if (train_wl_load < train_el_load)
+    {
+        consecutive_west++;
+        consecutive_east = 0;
+        last_direction = 'W';
+        return peek(&train_west);
+    }
+
+  //  if(train_ind_el == 0){
+        //return peek(&train_east);
+   /*      printf("0 goes first\n");
+    }
+    if(train_ind_wl == 3){
+        printf("3 goes next?\n");
+    } */
+
+
+    if (train_wl_load > train_el_load)
+    {
+        consecutive_east++;
+        consecutive_west = 0;
+        last_direction = 'E';
+        return peek(&train_east);
+    }
+
     if (train_wl_priority > train_el_priority)
     {
+        consecutive_west++;
+        consecutive_east = 0;
         last_direction = 'W';
         return peek(&train_west);
     }
 
     if (train_wl_priority < train_el_priority)
     {
+        consecutive_east++;
+        consecutive_west = 0;
         last_direction = 'E';
         return peek(&train_east);
     }
 
-    if (train_wl_priority == train_el_priority)
-    {
-
-        if (train_wl_load < train_el_load)
-        {
-            last_direction = 'W';
-            return peek(&train_west);
-        }
-        else if (train_wl_load > train_el_load)
-        {
-            last_direction = 'E';
-            return peek(&train_east);
-        }
-
-        if (train_ind_wl > train_ind_el)
-        {
-            last_direction = 'E';
-            return peek(&train_east);
-        }
-        else
-        {
-            last_direction = 'W';
-            return peek(&train_west);
-        }
-
-        if (last_direction == 'W')
-        {
-            last_direction = 'E';
-            return peek(&train_east);
-        }
-        else
-        {
-            last_direction = 'W';
-            return peek(&train_west);
-        }
+    if (consecutive_west >= 2) {
+        consecutive_east = 1;
+        consecutive_west = 0;
+        last_direction = 'E';
+        return peek(&train_east);
     }
+
+    if (consecutive_east >= 2) {
+        consecutive_west = 1;
+        consecutive_east = 0;
+        last_direction = 'W';
+        return peek(&train_west);
+    }
+
+
+    if (last_direction == 'W')
+    {
+        consecutive_east++;
+        consecutive_west = 0;
+        last_direction = 'E';
+        return peek(&train_east);
+    }
+    else
+    {
+        consecutive_west++;
+        consecutive_east = 0;
+        last_direction = 'W';
+        return peek(&train_west);
+    }
+
     return -1;
 }
 
 int main(int argc, char **argv)
 {
     pthread_t threads[75];
-    pthread_t thread2;
+    pthread_t thread2[75];
 
     int j = -1;
 
@@ -497,16 +552,14 @@ int main(int argc, char **argv)
         pthread_create(&threads[i], NULL, loading_time, (void *)(intptr_t)i); /* Loads the trains and decides which train to enter the main track */
     }
 
-    for (int i = 0; i < num_trains; i++)
-    { /* Waits until train is ready to cross */
+    int completed_trains = 0;
+    while(completed_trains < num_trains){
 
         pthread_mutex_lock(&count_mutex);
-        while (load_done == 0)
+       while(train_west.size == 0 && train_east.size == 0)
         {
             pthread_cond_wait(&count_cond, &count_mutex);
         }
-        load_done = 0;
-        pthread_mutex_unlock(&count_mutex);
 
         int j = find_index();
         if (j == -1)
@@ -523,18 +576,18 @@ int main(int argc, char **argv)
         {
             dequeue(&train_east);
         }
+      //  printf("Dequeued() Train %d\n", j);
+        pthread_mutex_unlock(&count_mutex);
 
-        pthread_create(&thread2, NULL, train_departs, (void *)(intptr_t)j);
+        pthread_create(&thread2[completed_trains], NULL, train_departs, (void *)(intptr_t)j);
+        pthread_join(thread2[completed_trains], NULL);
+
+        completed_trains++;
     }
 
     for (int i = 0; i < num_trains; i++)
     {
         pthread_join(threads[i], NULL); /* Wait for threads to all complete */
-    }
-
-    for (int i = 0; i < num_trains; i++)
-    {
-        pthread_join(thread2, NULL);
     }
 
     pthread_mutex_destroy(&count_mutex);
