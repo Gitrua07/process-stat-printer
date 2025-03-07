@@ -264,7 +264,6 @@ pthread_mutex_t track;            /* General lock for both east and west train *
 pthread_cond_t count_cond; /* Holds conditions */
 
 int load_done = 0; /* Checks if loading time is done. 0: Not done, 1: done */
-int load_done2 = 0;
 
 /**
  * Prints the current time into a buffer 
@@ -526,6 +525,7 @@ int main(int argc, char **argv)
         fscanf(input, "%s %d %d\n", train_data[num_trains].train_direction, &train_data[num_trains].load_time, &train_data[num_trains].cross_time);
         num_trains++;
     }
+    fclose(input);
 
     begin_time(); /* Begins clock timer */
 
