@@ -120,8 +120,6 @@ void enqueue(PriorityQueue *train, char value, int value2)
     heapifyUp(train, train->size);
     train->size++;
 
-    printf("DEBUG: enqueue() Train %d | Direction: %c | Priority: %d | Remaining Size: %d\n",
-           value2, train->t_dir[0], get_priority(train->t_dir[0]), train->size - 1);
 }
 
 /**
@@ -187,9 +185,6 @@ int dequeue(PriorityQueue *train)
     {
         heapifyDown(train, 0);
     }
-
-    printf("DEBUG: Dequeuing Train %d | Direction: %c | Priority: %d | Remaining Size: %d\n",
-           eject, train->t_dir[0], get_priority(train->t_dir[0]), train->size - 1);
 
     return eject;
 }
@@ -519,9 +514,6 @@ int main(int argc, char **argv)
             pthread_mutex_unlock(&count_mutex);
             break;
         }
-        printf("DEBUG: Selected Train %d | Direction: %c | Priority: %d | Load Time: %d | Last Direction: %c\n",
-               j, train_data[j].train_direction[0], get_priority(train_data[j].train_direction[0]),
-               train_data[j].load_time, last_direction);
 
         if (train_data[j].train_direction[0] == 'W' || train_data[j].train_direction[0] == 'w')
         {
