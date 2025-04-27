@@ -1,7 +1,8 @@
 # process-stat-printer
 
 ## Description
-A program that accesses the /proc folder and outputs the statistics about the process and operating system that is running the program environment.
+A program that accesses the /proc folder and outputs the statistics about the process and operating system that is running the program environment. 
+Implements user input and file access methods to implement the program using C. 
 
 ### Program Output with No Argument
 Outputs the following things about the operating system:
